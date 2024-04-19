@@ -1,10 +1,6 @@
 
-from datetime import datetime
-from typing import Union
-from roblox import search_user_id, search_username, UserProfile
-
-import aiohttp
-import asyncio
+from pydantic import BaseModel, Field
+from roblox import RobloxBadge, UserProfile
 
 BADGE_VALUES = [
 	[ 1, 100, ], # administrator badge
@@ -71,44 +67,57 @@ RANKING_BOUNDARIES = [
 	[ -1, "Common" ],
 ]
 
-async def get_profile_star_rating( profile : UserProfile ) -> int:
+class StarIncrement(BaseModel):
+	name : str = Field('unknown')
+	amount : int = Field(-1)
+
+async def badge_value_by_id( badge_id : int ) -> int:
+	for other in BADGE_VALUES:
+		if other[0] == badge_id:
+			return other[1]
+	return 10
+
+async def get_profile_star_rating( profile : UserProfile ) -> tuple[int, list[StarIncrement]]:
 
 	star_count : int = 0
+	star_incrementors : list[StarIncrement] = []
 
 	# roblox badges
-	def find_badge_value( bid : int ) -> int:
-		for other in BADGE_VALUES:
-			if bid == other[0]:
-				return other[1]
-		return 5
 	for item in profile.roblox_badges:
-		star_count += find_badge_value( item.id )
+		value : int = await badge_value_by_id( item.id )
+		star_incrementors.append(StarIncrement(name=f'Owns Badge: {item.name}', amount=value))
+		star_count += value
 
 	# followers
 	for item in FOLLOWERS:
 		if profile.followers_count > item[0]:
 			star_count += item[1]
+			star_incrementors.append(StarIncrement(name=f'Followers - >{int(item[0])}', amount=item[1]))
 			break
 
 	# place visits
 	for item in PLACE_VISITS:
 		if profile.total_visits > item[0]:
 			star_count += item[1]
+			star_incrementors.append(StarIncrement(name=f'Profile Visits - >{item[0]}', amount=item[1]))
 			break
 
 	# username length
 	for item in USERNAME_LETTER_COUNT:
 		if len(profile.username) <= item[0]:
 			star_count += item[1]
+			star_incrementors.append(StarIncrement(name=f'{item[0]} Letter Username', amount=item[1]))
 			break
 
 	# account age
 	for item in ACCOUNT_AGE:
 		if profile.account_age > item[0]:
 			star_count += item[1]
+			star_incrementors.append(StarIncrement(name=f'Account Age - >{round(item[0] / SECONDS_PER_YEAR)}yrs', amount=item[1]))
 			break
 
-	return star_count
+	star_incrementors.sort(key=lambda x : x.amount, reverse=True)
+	return star_count, star_incrementors
 
 async def get_star_rating_name( rating : int ) -> str:
 	for item in RANKING_BOUNDARIES:

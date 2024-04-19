@@ -8,8 +8,9 @@ import asyncio
 async def main() -> None:
 	profile : UserProfile = await search_username('Roblox')
 	print(profile.username)
-	rating : int = await get_profile_star_rating( profile )
+	rating, incrementors = await get_profile_star_rating( profile )
 	print(rating)
+	print([dict(item) for item in incrementors])
 	rating_name : str = await get_star_rating_name( rating )
 	print(rating_name)
 
