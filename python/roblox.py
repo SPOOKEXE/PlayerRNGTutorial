@@ -36,7 +36,7 @@ user_profile_cache : dict[int, UserProfile] = dict()
 processing : list[int] = list()
 
 async def fetch_text(client : aiohttp.ClientSession, url : str) -> Union[str, None]:
-	print(url)
+	# print(url)
 	async with client.get(url) as resp:
 		resp : aiohttp.ClientResponse = resp
 		if resp.status == 200:
@@ -63,7 +63,9 @@ async def post_json(client : aiohttp.ClientSession, url : str, body : dict | lis
 		# print(resp.status, resp.reason)
 		return None
 
-async def process_user_id( user_id : int ) -> Union[UserProfile, None]:
+async def search_user_id( user_id : int ) -> Union[UserProfile, None]:
+	print( user_id )
+
 	now : int = await get_time()
 
 	profile : UserProfile = user_profile_cache.get(user_id)
@@ -73,6 +75,15 @@ async def process_user_id( user_id : int ) -> Union[UserProfile, None]:
 			return profile
 		user_profile_cache.pop(user_id)
 		del profile
+
+	busy : bool = await is_processing_user_id( user_id )
+	while busy is True:
+		await asyncio.sleep(0.2)
+		busy : bool = await is_processing_user_id( user_id )
+
+	profile : UserProfile = user_profile_cache.get(user_id)
+	if profile is not None:
+		return profile
 
 	if user_id not in processing:
 		processing.append(user_id)
@@ -94,11 +105,13 @@ async def process_user_id( user_id : int ) -> Union[UserProfile, None]:
 		# get their follower count
 		profile_followers_url : str = f'https://friends.roblox.com/v1/users/{user_id}/followers/count'
 		followers_data = await fetch_json(client, profile_followers_url)
+
 		profile.followers_count = followers_data['count']
 
 		# get their roblox badges
 		profile_badges_url : str = f'https://accountinformation.roblox.com/v1/users/{user_id}/roblox-badges'
 		badges_data = await fetch_json(client, profile_badges_url)
+
 		profile.roblox_badges = [ RobloxBadge(id=item['id'], name=item['name']) for item in badges_data ]
 
 		# TODO:
@@ -107,22 +120,17 @@ async def process_user_id( user_id : int ) -> Union[UserProfile, None]:
 		# friends : list[int] = list()
 
 	profile.update_timestamp = now
+	processing.remove(user_id)
 	user_profile_cache[user_id] = profile
 	return profile
 
 async def is_processing_user_id( user_id : int ) -> bool:
 	return user_id in processing
 
-async def search_user_id( user_id : int ) -> Union[UserProfile, None]:
-	processing : bool = await is_processing_user_id( user_id )
-	while processing is True:
-		asyncio.sleep(0.2)
-		processing : bool = await is_processing_user_id( user_id )
-	return await process_user_id( user_id )
-
 username_to_userid : dict[str, int] = dict()
 async def search_username( username : str ) -> Union[UserProfile, None]:
 	if username not in username_to_userid.keys():
+
 		async with aiohttp.ClientSession(headers=DEFAULT_HEADERS) as client:
 			url : str = 'https://users.roblox.com/v1/usernames/users'
 			js : dict = {"usernames":[username],"excludeBannedUsers":False}

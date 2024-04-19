@@ -1,4 +1,3 @@
-
 aiohttp
 bs4
 pillow
